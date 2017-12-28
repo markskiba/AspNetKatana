@@ -19,3 +19,5 @@ node_modules
 *.snk
 .nuget/NuGet.exe
 docs/build
+/.vs
+/src/Microsoft.Owin.Security.Cognito/.vs/Microsoft.Owin.Security.Cognito/v15/Server/sqlite3
