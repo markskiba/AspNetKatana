@@ -1,4 +1,5 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved. See License.txt in the project root for license information.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
 using System.Collections.Generic;
@@ -7,6 +8,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.Owin.Infrastructure;
 using Microsoft.Owin.Logging;
+using Microsoft.Owin.Security.DataHandler.Encoder;
 using Microsoft.Owin.Security.Infrastructure;
 using Newtonsoft.Json.Linq;
 
@@ -15,8 +17,8 @@ namespace Microsoft.Owin.Security.Cognito
     internal class CognitoOAuth2AuthenticationHandler : AuthenticationHandler<CognitoOAuth2AuthenticationOptions>
     {
         private const string TokenEndpoint = "/oauth2/token";
-        private const string UserInfoEndpoint = "https://www.Cognitoapis.com/oauth2/v3/userinfo?access_token="; // TODO: endpoint needed?
-        private const string AuthorizeEndpoint = "/oauth2/authorize";
+        private const string UserInfoEndpoint = "/oauth2/v3/userinfo?access_token="; // TODO: endpoint needed?
+		private const string AuthorizeEndpoint = "/login";//"/oauth2/authorize";
 
         private readonly ILogger _logger;
         private readonly HttpClient _httpClient;
@@ -66,14 +68,17 @@ namespace Microsoft.Owin.Security.Cognito
                 // Build up the body for the token request
                 var body = new List<KeyValuePair<string, string>>();
                 body.Add(new KeyValuePair<string, string>("grant_type", "authorization_code"));
-                body.Add(new KeyValuePair<string, string>("code", code));
-                body.Add(new KeyValuePair<string, string>("redirect_uri", redirectUri));
-                body.Add(new KeyValuePair<string, string>("client_id", Options.ClientId));
-                body.Add(new KeyValuePair<string, string>("client_secret", Options.ClientSecret));
+				body.Add(new KeyValuePair<string, string>("client_id", Options.ClientId));
+                body.Add(new KeyValuePair<string, string>("code", "AUTHORIZATION_CODE"));
+				body.Add(new KeyValuePair<string, string>("code_verifier", "CODE_VERIFIER"));
+				body.Add(new KeyValuePair<string, string>("redirect_uri", redirectUri));
+                //body.Add(new KeyValuePair<string, string>("client_secret", Options.ClientSecret));
 
                 // Request the token
-                HttpResponseMessage tokenResponse =
-                    await _httpClient.PostAsync(Options.CognitoDomain+TokenEndpoint, new FormUrlEncodedContent(body));
+				string secret = Base64Encode(Options.ClientId+":"+Options.ClientSecret);
+				string requestUri = Options.CognitoDomain+TokenEndpoint+ $"&Content-Type=\'application/x-www-form-urlencoded\'&Authorization=Basic {secret}";
+				HttpResponseMessage tokenResponse =
+                    await _httpClient.PostAsync(requestUri, new FormUrlEncodedContent(body));
                 tokenResponse.EnsureSuccessStatusCode();
                 string text = await tokenResponse.Content.ReadAsStringAsync();
 
@@ -145,7 +150,13 @@ namespace Microsoft.Owin.Security.Cognito
             }
         }
 
-        protected override Task ApplyResponseChallengeAsync()
+		public static string Base64Encode(string plainText)
+		{
+			var plainTextBytes = System.Text.Encoding.UTF8.GetBytes(plainText);
+			return System.Convert.ToBase64String(plainTextBytes);
+		}
+
+		protected override Task ApplyResponseChallengeAsync()
         {
             if (Response.StatusCode != 401)
             {
