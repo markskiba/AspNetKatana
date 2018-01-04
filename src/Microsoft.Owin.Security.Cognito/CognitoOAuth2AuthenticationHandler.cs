@@ -4,7 +4,9 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Owin.Infrastructure;
 using Microsoft.Owin.Logging;
@@ -69,21 +71,24 @@ namespace Microsoft.Owin.Security.Cognito
                 var body = new List<KeyValuePair<string, string>>();
                 body.Add(new KeyValuePair<string, string>("grant_type", "authorization_code"));
 				body.Add(new KeyValuePair<string, string>("client_id", Options.ClientId));
-                body.Add(new KeyValuePair<string, string>("code", "AUTHORIZATION_CODE"));
-				body.Add(new KeyValuePair<string, string>("code_verifier", "CODE_VERIFIER"));
+                body.Add(new KeyValuePair<string, string>("code", code));
+				//body.Add(new KeyValuePair<string, string>("code_verifier", "CODE_VERIFIER"));
 				body.Add(new KeyValuePair<string, string>("redirect_uri", redirectUri));
-                //body.Add(new KeyValuePair<string, string>("client_secret", Options.ClientSecret));
 
-                // Request the token
-				string secret = Base64Encode(Options.ClientId+":"+Options.ClientSecret);
-				string requestUri = Options.CognitoDomain+TokenEndpoint+ $"&Content-Type=\'application/x-www-form-urlencoded\'&Authorization=Basic {secret}";
-				HttpResponseMessage tokenResponse =
-                    await _httpClient.PostAsync(requestUri, new FormUrlEncodedContent(body));
-                tokenResponse.EnsureSuccessStatusCode();
-                string text = await tokenResponse.Content.ReadAsStringAsync();
+				// Request the token
+				var request = new FormUrlEncodedContent(body);
+				request.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+				var url = $"{Options.CognitoDomain}{TokenEndpoint}";
+				var credentials = Encoding.ASCII.GetBytes($"{Options.ClientId}:{Options.ClientSecret}");
+				_httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(credentials));
 
-                // Deserializes the token response
-                JObject response = JObject.Parse(text);
+				HttpResponseMessage tokenResponse = await _httpClient.PostAsync(new Uri(url), request);
+
+				tokenResponse.EnsureSuccessStatusCode();
+				string text = await tokenResponse.Content.ReadAsStringAsync();
+
+				// Deserializes the token response
+				JObject response = JObject.Parse(text);
                 string accessToken = response.Value<string>("access_token");
                 string expires = response.Value<string>("expires_in");
                 string refreshToken = response.Value<string>("refresh_token");
@@ -149,12 +154,6 @@ namespace Microsoft.Owin.Security.Cognito
                 return new AuthenticationTicket(null, properties);
             }
         }
-
-		public static string Base64Encode(string plainText)
-		{
-			var plainTextBytes = System.Text.Encoding.UTF8.GetBytes(plainText);
-			return System.Convert.ToBase64String(plainTextBytes);
-		}
 
 		protected override Task ApplyResponseChallengeAsync()
         {
